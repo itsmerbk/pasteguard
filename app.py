@@ -1,6 +1,4 @@
-from pathlib import Path
-
-APP_CODE = r'''import hashlib
+import hashlib
 import json
 import math
 import re
@@ -12,7 +10,7 @@ import webbrowser
 from datetime import datetime
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from urllib.parse import parse_qs, urlparse
+from urllib.parse import urlparse
 
 HOST = "127.0.0.1"
 PORT = 8787
@@ -34,7 +32,7 @@ def init_db() -> sqlite3.Connection:
     conn = sqlite3.connect(str(DB_PATH), check_same_thread=False)
     conn.row_factory = sqlite3.Row
     with db_lock:
-        conn.execute("""
+        conn.execute('''
             CREATE TABLE IF NOT EXISTS clips (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 content_hash TEXT UNIQUE,
@@ -45,7 +43,7 @@ def init_db() -> sqlite3.Connection:
                 copy_count INTEGER DEFAULT 1,
                 updated_at TEXT NOT NULL
             )
-        """)
+        ''')
         conn.commit()
     return conn
 
@@ -80,7 +78,7 @@ def redact_secret(text: str) -> str:
         redacted = " ".join(tokens)
     return redacted
 
-def classify_content(text: str) -> tuple[str, str | None]:
+def classify_content(text: str):
     stripped = text.strip()
     secret = detect_secret(stripped)
     if secret:
@@ -97,7 +95,7 @@ def classify_content(text: str) -> tuple[str, str | None]:
     if stripped.startswith(cmd_prefixes) and len(stripped.splitlines()) <= 3:
         return "COMMAND", None
     code_markers = ("def ", "class ", "import ", "const ", "function ", "public static", "#include", "=>")
-    if any(m in stripped for m in code_markers) or "\n" in stripped and ("{" in stripped or ":" in stripped):
+    if any(m in stripped for m in code_markers) or ("\n" in stripped and ("{" in stripped or ":" in stripped)):
         return "CODE", None
     return "TEXT", None
 
@@ -124,7 +122,7 @@ def broadcast_sse(event_payload: dict) -> None:
         for d in dead:
             sse_clients.remove(d)
 
-def save_clip(text: str) -> dict | None:
+def save_clip(text: str):
     if not text or not text.strip():
         return None
     digest = hashlib.sha256(text.encode("utf-8")).hexdigest()
@@ -168,7 +166,7 @@ HTML_PAGE = r'''<!DOCTYPE html>
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>PasteGuard — Real-Time macOS Clipboard &amp; Secret Firewall</title>
+  <title>PasteGuard - Real-Time macOS Clipboard &amp; Secret Firewall</title>
   <style>
     :root {
       --bg: #090d16;
@@ -615,7 +613,6 @@ class Handler(BaseHTTPRequestHandler):
         self.end_headers()
 
 if __name__ == "__main__":
-    # Seed initial welcome item if empty
     with db_lock:
         count = conn.execute("SELECT COUNT(*) FROM clips").fetchone()[0]
     if count == 0:
@@ -624,28 +621,9 @@ if __name__ == "__main__":
     threading.Thread(target=clipboard_watcher, daemon=True).start()
     threading.Thread(target=lambda: (time.sleep(0.7), webbrowser.open(f"http://{HOST}:{PORT}")), daemon=True).start()
 
-    print(f"PasteGuard live at http://{HOST}:{PORT} — Press Cmd+C anywhere on your Mac!")
+    print(f"PasteGuard live at http://{HOST}:{PORT} - Press Cmd+C anywhere on your Mac!")
     server = ThreadingHTTPServer((HOST, PORT), Handler)
     try:
         server.serve_forever()
     except KeyboardInterrupt:
         print("\nPasteGuard stopped.")
-'''
-
-README_CODE = r'''# PasteGuard — Real-Time macOS Clipboard Intelligence & Secret-Leak Firewall
-
-A local-first macOS background service and live Server-Sent Events (SSE) web dashboard that captures every `Cmd + C` event in real time, detects accidental API key/token leaks using regex and Shannon entropy analysis, auto-classifies code/commands/URLs/JSON, and provides instant search and one-click redaction.
-
-## Features
-- **Zero-Refresh Live Stream:** Uses `ThreadingHTTPServer` + SSE (`/events`) to push macOS `pbpaste` updates to the UI in `<400ms`.
-- **Secret-Leak Firewall:** Intercepts GitHub PATs, AI/API keys (`sk-`), AWS keys, JWTs, private keys, and high-entropy secrets with one-click **Copy Redacted** and **Purge All Secrets**.
-- **Zero Dependencies:** Pure Python 3 standard library + SQLite (`pasteguard.db`).
-
-## Quickstart
-    python3 app.py
-'''
-
-Path("app.py").write_text(APP_CODE, encoding="utf-8")
-Path("README.md").write_text(README_CODE, encoding="utf-8")
-Path(".gitignore").write_text("pasteguard.db\n__pycache__/\n", encoding="utf-8")
-print("Created app.py, README.md, and .gitignore")
